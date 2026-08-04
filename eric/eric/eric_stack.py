@@ -6,6 +6,10 @@ from aws_cdk import (
     # Use Event to invoke every x minutes for graph
     Stack,
     aws_lambda as _lambda,
+    aws_cloudtrail as cloudtrail,
+    aws_events as events,
+    Duration,
+
 )
 from constructs import Construct
 
@@ -21,3 +25,14 @@ class EricStack(Stack):
             code=_lambda.Code.from_asset("lambda"),
             handler="wiring.helloworldfunc",
         )
+
+    # Create the EventBridge Rule 
+        eventRule = events.Rule(
+            self,
+            "myRule",
+            schedule=events.Schedule.rate(Duration.minutes(60)),
+        )
+
+    #Create the three custom metrics
+    
+    #Visualise them through a Dashboard
