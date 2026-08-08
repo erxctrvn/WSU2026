@@ -30,7 +30,7 @@ class EricStack(Stack):
         eventRule = events.Rule(
             self,
             "myRule",
-            schedule=events.Schedule.rate(Duration.minutes(60)),
+            schedule=events.Schedule.rate(Duration.minutes(30)),
         )
 
     #Create the three custom metrics
