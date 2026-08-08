@@ -33,6 +33,8 @@ class EricStack(Stack):
             schedule=events.Schedule.rate(Duration.minutes(30)),
         )
 
-    #Create the three custom metrics
+   
+    #Add cloudwatch
+
+    #Link to lambda
     
-    #Visualise them through a Dashboard
