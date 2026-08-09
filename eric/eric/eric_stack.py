@@ -8,6 +8,8 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_cloudtrail as cloudtrail,
     aws_events as events,
+    aws_iam as iam,
+    aws_events_targets as targets,
     Duration,
 
 )
@@ -35,6 +37,12 @@ class EricStack(Stack):
 
    
     #Add cloudwatch
+    _lambda.addtorolepolicy(
+        iam.PolicyStatement(
+            actions=["cloudwatch:PutMetricData"],
+            resources=["*"],
+        )
+    )
 
     #Link to lambda
     
