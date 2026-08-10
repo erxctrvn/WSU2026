@@ -37,12 +37,13 @@ class EricStack(Stack):
 
    
     #Add cloudwatch
-    _lambda.addtorolepolicy(
+        mylambda.add_to_role_policy(
         iam.PolicyStatement(
             actions=["cloudwatch:PutMetricData"],
             resources=["*"],
+            )
         )
-    )
 
     #Link to lambda
+        eventRule.add_target(targets.LambdaFunction(mylambda))
     

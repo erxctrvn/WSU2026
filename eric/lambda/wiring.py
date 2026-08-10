@@ -19,7 +19,7 @@ def helloworldfunc(event,context):
 
     latency_ms = (time.time() - start_time) * 1000
 
-    cloudwatch.putmetric(
+    cloudwatch.put_metric_data(
         Namespace='WebsiteMonitoring',
         MetricData=[
             {'MetricName': 'ResponseTime', 'Value': latency_ms, 'Unit': 'Milliseconds'},
