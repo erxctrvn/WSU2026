@@ -83,7 +83,7 @@ class EricStack(Stack):
         availabilityAlarm = cloudwatch.Alarm('self', 'Alarm from URL status',
                 metric="StatusCode",
                 threshold="1",
-                evaluation_periods=2, 
+                evaluation_periods=1, 
                 comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_LOWER_THRESHOLD,
                 treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
         
