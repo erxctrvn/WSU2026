@@ -1,6 +1,8 @@
 #This is the application where metric and values 
 #From web resource
 #This runs on top of the stack.
+#CDK is for infrastructure creation
+#SDK is for runtime.
 import json,time,urllib.request,boto3
 cloudwatch = boto3.client('cloudwatch')
 urltomonitor = "https://www.youtube.com/"
@@ -32,7 +34,3 @@ def helloworldfunc(event,context):
     return {'statusCode': 200, 'body': json.dumps("Checked website")}
 
 
-
-#Create the three custom metrics
-
-#Visualise them through a Dashboard
