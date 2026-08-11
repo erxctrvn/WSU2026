@@ -19,6 +19,8 @@ def helloworldfunc(event,context):
 
     latency_ms = (time.time() - start_time) * 1000
 
+    #Obtain metrics (not same a dashboard)
+    #MetricName is name space/package, all metrics belong under it.
     cloudwatch.put_metric_data(
         Namespace='WebsiteMonitoring',
         MetricData=[

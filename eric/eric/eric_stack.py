@@ -4,12 +4,15 @@ from aws_cdk import (
     # Define what web URL you want to monitor and choose 
     # 3 different metrics for it and visualise it.
     # Use Event to invoke every x minutes for graph
+    # Project is to use AWS compute resources, create and deploy application on AWS.
+    # Application is to monitor web URL.
     Stack,
     aws_lambda as _lambda,
     aws_cloudtrail as cloudtrail,
     aws_events as events,
     aws_iam as iam,
     aws_events_targets as targets,
+    aws_cloudwatch as cloudwatch,
     Duration,
 
 )
@@ -32,7 +35,7 @@ class EricStack(Stack):
         eventRule = events.Rule(
             self,
             "myRule",
-            schedule=events.Schedule.rate(Duration.minutes(30)),
+            schedule=events.Schedule.rate(Duration.minutes(5)),
         )
 
    
@@ -47,3 +50,24 @@ class EricStack(Stack):
     #Link to lambda
         eventRule.add_target(targets.LambdaFunction(mylambda))
     
+    #Create the dashboard for cloudwatch (using the metrics obtained)
+        responsetimedash = cloudwatch.Metric(
+            namespace="WebsiteMonitoring",
+            metric_name="ResponseTime",
+        )
+        statuscodedash = cloudwatch.Metric(
+            namespace="WebsiteMonitoring",
+            metric_name= "StatusCode",
+        )
+        availabilitydash = cloudwatch.Metric(
+            namespace="WebsiteMonitoring", 
+            metric_name="Availability",
+        )
+        dashboard = cloudwatch.Dashboard(self, "MetricMonitoringDashboard")
+        dashboard.add_widgets(
+            cloudwatch.GraphWidget(title="ResponseTime", left=[responsetimedash]),
+            cloudwatch.GraphWidget(title="HTTPS Status", left=[statuscodedash]),
+            cloudwatch.GraphWidget(title="Availability", left=[availabilitydash]),
+        )
+            
+        
