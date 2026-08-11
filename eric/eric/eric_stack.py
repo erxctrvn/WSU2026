@@ -69,5 +69,21 @@ class EricStack(Stack):
             cloudwatch.GraphWidget(title="HTTPS Status", left=[statuscodedash]),
             cloudwatch.GraphWidget(title="Availability", left=[availabilitydash]),
         )
-            
+
+        #Creating a cloudwatch alarm belongs in CDK/Infrastructure
+        #Because it manages lifecycle, trhesholds and permissions.,
+        #Cloudwatch alarm can invoke Lambda or through eventbridge
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
+        responseAlarm = cloudwatch.Alarm('self', "Alarm from Response Time",
+                metric= "ResponseTime",
+                threshhold=200,
+                evaluation_periods=2,
+                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+                treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
+        availabilityAlarm = cloudwatch.Alarm('self', 'Alarm from URL status',
+                metric="StatusCode",
+                threshold="1",
+                evaluation_periods=2, 
+                comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_LOWER_THRESHOLD,
+                treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
         
