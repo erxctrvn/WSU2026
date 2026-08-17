@@ -6,6 +6,9 @@
 import json,time,urllib.request,boto3
 cloudwatch = boto3.client('cloudwatch')
 
+def loadmultwebs():
+    with open('websites.json') as f:
+        return json.load(f)
 
 def crawl_func(url): #used for just one website
     start_time = time.time()
@@ -19,7 +22,7 @@ def crawl_func(url): #used for just one website
         is_up = 0
 
     latency_ms = (time.time() - start_time) * 1000
-    cloudwatch.put.metric_data(
+    cloudwatch.put_metric_data(
         Namespace="WebsiteMonitoring",
         #Dimensions creates a list, category ('name'), value ('url'), 
         # value is in through latency_ms = (time.time() - start_time) * 1000
@@ -32,11 +35,11 @@ def crawl_func(url): #used for just one website
         ]
     )
 def helloworldfunc(event,context): #looped for multiple
-    websites = websites() #websites.json reference
-    for url in websites: # loop through json 
+    websites_json = loadmultwebs() #websites.json reference
+    for url in websites_json: # loop through json 
         crawl_func(url) # use the crawl_func to check metrics one for each websites
         #{length(websites)}
-    return{'statusCode': 200, 'body': json.dumps(f"Checked {len(websites)} websites")}
+    return{'statusCode': 200, 'body': json.dumps(f"Checked {len(websites_json)} websites")}
             
     #Obtain metrics (not same a dashboard)
     #MetricName is name space/package, all metrics belong under it.

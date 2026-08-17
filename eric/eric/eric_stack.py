@@ -83,9 +83,9 @@ class EricStack(Stack):
                 dimensions_map={"Website": url},
             )
             dashboard.add_widgets(
-                cloudwatch.GraphWidget(title="ResponseTime", left=[responsetimedash]),
-                cloudwatch.GraphWidget(title="HTTPS Status", left=[statuscodedash]),
-                cloudwatch.GraphWidget(title="Availability", left=[availabilitydash]),
+                cloudwatch.GraphWidget(title=f"ResponseTime - {url}", left=[responsetimedash]),
+                cloudwatch.GraphWidget(title=f"HTTPS Status- {url}", left=[statuscodedash]),
+                cloudwatch.GraphWidget(title=f"Availability- {url}", left=[availabilitydash]),
             )
 
 
@@ -96,13 +96,13 @@ class EricStack(Stack):
         #Cloudwatch alarm can invoke Lambda or through eventbridge
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
         #Don't need to hardcode variables as it is inside a loop now.
-            cloudwatch.Alarm(self, "AlarmFromResponseTime",
+            cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
                     metric= responsetimedash,
                     threshold=200,
                     evaluation_periods=2,
                     comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
                     treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
-            cloudwatch.Alarm(self, "AlarmFromURLStatus",
+            cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
                     metric=availabilitydash,
                     threshold=1,
                     evaluation_periods=1, 
