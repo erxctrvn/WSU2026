@@ -1,4 +1,7 @@
+import json
+import os
 from aws_cdk import (
+    
     # Duration,
     # Import stack here like AWS Lambda, or any infrastructure.
     # Define what web URL you want to monitor and choose 
@@ -41,49 +44,68 @@ class EricStack(Stack):
    
     #Add cloudwatch
         mylambda.add_to_role_policy(
-        iam.PolicyStatement(
-            actions=["cloudwatch:PutMetricData"],
-            resources=["*"],
+            iam.PolicyStatement(
+                actions=["cloudwatch:PutMetricData"],
+                resources=["*"],
+                )
             )
-        )
 
-    #Link to lambda
+        #Link to lambda
         eventRule.add_target(targets.LambdaFunction(mylambda))
-    
-    #Create the dashboard for cloudwatch (using the metrics obtained)
-        responsetimedash = cloudwatch.Metric(
-            namespace="WebsiteMonitoring",
-            metric_name="ResponseTime",
-        )
-        statuscodedash = cloudwatch.Metric(
-            namespace="WebsiteMonitoring",
-            metric_name= "StatusCode",
-        )
-        availabilitydash = cloudwatch.Metric(
-            namespace="WebsiteMonitoring", 
-            metric_name="Availability",
-        )
+        
+        # Create the dashboard for cloudwatch (using the metrics obtained)
+        # Use os import to read same websitesjson as lambda
+        websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
+        with open(websites_path) as f:
+            websites = json.load(f)
+
         dashboard = cloudwatch.Dashboard(self, "MetricMonitoringDashboard")
-        dashboard.add_widgets(
-            cloudwatch.GraphWidget(title="ResponseTime", left=[responsetimedash]),
-            cloudwatch.GraphWidget(title="HTTPS Status", left=[statuscodedash]),
-            cloudwatch.GraphWidget(title="Availability", left=[availabilitydash]),
-        )
+
+
+
+        # To-do create a for loop for each website linking to the json file that lambda uses
+        for url in websites:
+            alarm_id_safe = url.replace("https://", "").replace("/","").replace(".","")
+
+            responsetimedash = cloudwatch.Metric(
+                namespace="WebsiteMonitoring",
+                metric_name="ResponseTime",
+                dimensions_map={"Website": url},
+            )
+            statuscodedash = cloudwatch.Metric(
+                namespace="WebsiteMonitoring",
+                metric_name= "StatusCode",
+                dimensions_map={"Website": url},
+            )
+            availabilitydash = cloudwatch.Metric(
+                namespace="WebsiteMonitoring", 
+                metric_name="Availability",
+                dimensions_map={"Website": url},
+            )
+            dashboard.add_widgets(
+                cloudwatch.GraphWidget(title="ResponseTime", left=[responsetimedash]),
+                cloudwatch.GraphWidget(title="HTTPS Status", left=[statuscodedash]),
+                cloudwatch.GraphWidget(title="Availability", left=[availabilitydash]),
+            )
+
+
+
 
         #Creating a cloudwatch alarm belongs in CDK/Infrastructure
         #Because it manages lifecycle, trhesholds and permissions.,
         #Cloudwatch alarm can invoke Lambda or through eventbridge
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
-        responseAlarm = cloudwatch.Alarm(self, "AlarmFromResponseTime",
-                metric= responsetimedash,
-                threshold=200,
-                evaluation_periods=2,
-                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
-                treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
-        availabilityAlarm = cloudwatch.Alarm(self, "AlarmFromURLStatus",
-                metric=availabilitydash,
-                threshold=1,
-                evaluation_periods=1, 
-                comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
-                treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
+        #Don't need to hardcode variables as it is inside a loop now.
+            cloudwatch.Alarm(self, "AlarmFromResponseTime",
+                    metric= responsetimedash,
+                    threshold=200,
+                    evaluation_periods=2,
+                    comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+                    treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
+            cloudwatch.Alarm(self, "AlarmFromURLStatus",
+                    metric=availabilitydash,
+                    threshold=1,
+                    evaluation_periods=1, 
+                    comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+                    treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
         
