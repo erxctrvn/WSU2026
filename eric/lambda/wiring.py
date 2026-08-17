@@ -32,21 +32,11 @@ def crawl_func(url): #used for just one website
         ]
     )
 def helloworldfunc(event,context): #looped for multiple
-    websites = load_websites()
-    for url in websites:
-        start_time = time.time()
-        try:
+    websites = websites() #websites.json reference
+    for url in websites: # loop through json 
+        crawl_func(url) # use the crawl_func to check metrics one for each websites
+        #{length(websites)}
+    return{'statusCode': 200, 'body': json.dumps(f"Checked {len(websites)} websites")}
             
     #Obtain metrics (not same a dashboard)
     #MetricName is name space/package, all metrics belong under it.
-    cloudwatch.put_metric_data(
-        Namespace='WebsiteMonitoring',
-        MetricData=[
-            {'MetricName': 'ResponseTime', 'Value': latency_ms, 'Unit': 'Milliseconds'},
-            {'MetricName': 'StatusCode', 'Value': status_code, 'Unit': 'None'},
-            {'MetricName': 'Availability', 'Value': is_up, 'Unit': 'Count'}
-        ]
-    )
-   
-
-
