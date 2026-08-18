@@ -11,7 +11,6 @@ from aws_cdk import (
     # Application is to monitor web URL.
     Stack,
     aws_lambda as _lambda,
-    aws_cloudtrail as cloudtrail,
     aws_events as events,
     aws_iam as iam,
     aws_events_targets as targets,
@@ -38,7 +37,7 @@ class EricStack(Stack):
         eventRule = events.Rule(
             self,
             "myRule",
-            schedule=events.Schedule.rate(Duration.minutes(5)),
+            schedule=events.Schedule.rate(Duration.minutes(30)),
         )
 
    
@@ -54,6 +53,7 @@ class EricStack(Stack):
         eventRule.add_target(targets.LambdaFunction(mylambda))
         
         # Create the dashboard for cloudwatch (using the metrics obtained)
+
         # Use os import to read same websitesjson as lambda
         websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
         with open(websites_path) as f:
