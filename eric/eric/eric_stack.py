@@ -55,6 +55,7 @@ class EricStack(Stack):
         # Create the dashboard for cloudwatch (using the metrics obtained)
 
         # Use os import to read same websitesjson as lambda
+        # good for scale, dont need to update both files
         websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
         with open(websites_path) as f:
             websites = json.load(f)

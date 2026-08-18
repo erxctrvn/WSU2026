@@ -8,6 +8,7 @@ cloudwatch = boto3.client('cloudwatch')
 
 def loadmultwebs():
     with open('websites.json') as f:
+        # loading json instead of hardcoding
         return json.load(f)
 
 def crawl_func(url): #used for just one website

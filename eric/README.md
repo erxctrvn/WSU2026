@@ -17,5 +17,9 @@ Two alarms are created
 - High response time: triggers if response time exceeds threshold for consecutive checks (2)
 - Low availability: Triggers if site is unreachable
 
+# Dashboard
+# How to run it 
+# Design
+# CDK instructions
 
 
