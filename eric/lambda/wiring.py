@@ -14,7 +14,9 @@ def loadmultwebs():
 def crawl_func(url): #used for just one website
     start_time = time.time()
     try:
-        response = urllib.request.urlopen(url, timeout = 10)
+        #fix for latency and availability using user agent because normal url is blocked by most websites
+        req = urllib.request.Request(url, headers ={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req, timeout = 10)
         status_code = response.getcode()
         is_up = 1
     except Exception as e:
@@ -23,6 +25,7 @@ def crawl_func(url): #used for just one website
         is_up = 0
 
     latency_ms = (time.time() - start_time) * 1000
+    #https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/cloudwatch/client/put_metric_data.html
     cloudwatch.put_metric_data(
         Namespace="WebsiteMonitoring",
         #Dimensions creates a list, category ('name'), value ('url'), 

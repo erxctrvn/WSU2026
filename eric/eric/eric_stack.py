@@ -25,6 +25,8 @@ class EricStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_lambda/Function.html
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_lambda/Code.html
         mylambda = _lambda.Function(
             self,
             "myFunction",
@@ -34,6 +36,8 @@ class EricStack(Stack):
         )
 
     # Create the EventBridge Rule 
+    # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_events/Schedule.html
+
         eventRule = events.Rule(
             self,
             "myRule",
@@ -42,6 +46,8 @@ class EricStack(Stack):
 
    
     #Add cloudwatch
+    # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_iam/PolicyStatement.html
+
         mylambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["cloudwatch:PutMetricData"],
@@ -65,6 +71,7 @@ class EricStack(Stack):
 
 
         # To-do create a for loop for each website linking to the json file that lambda uses
+        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Metric.html
         for url in websites:
             alarm_id_safe = url.replace("https://", "").replace("/","").replace(".","")
 
@@ -82,7 +89,8 @@ class EricStack(Stack):
                 namespace="WebsiteMonitoring", 
                 metric_name="Availability",
                 dimensions_map={"Website": url},
-            )
+            ) 
+            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Dashboard.html
             dashboard.add_widgets(
                 cloudwatch.GraphWidget(title=f"ResponseTime - {url}", left=[responsetimedash]),
                 cloudwatch.GraphWidget(title=f"HTTPS Status- {url}", left=[statuscodedash]),
@@ -96,6 +104,7 @@ class EricStack(Stack):
         #Because it manages lifecycle, trhesholds and permissions.,
         #Cloudwatch alarm can invoke Lambda or through eventbridge
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Alarm.html
         #Don't need to hardcode variables as it is inside a loop now.
             cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
                     metric= responsetimedash,
