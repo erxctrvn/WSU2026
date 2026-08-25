@@ -15,6 +15,11 @@ from aws_cdk import (
     aws_iam as iam,
     aws_events_targets as targets,
     aws_cloudwatch as cloudwatch,
+    aws_sns as sns,
+    aws_sns_subscriptions as subscriptions,
+    aws_cloudwatch_actions as actions,
+    aws_dynamodb as dynamodb,
+    RemovalPolicy,
     Duration,
 
 )
@@ -41,10 +46,52 @@ class EricStack(Stack):
         eventRule = events.Rule(
             self,
             "myRule",
-            schedule=events.Schedule.rate(Duration.minutes(30)),
+            schedule=events.Schedule.rate(Duration.minutes(1)),
         )
 
-   
+    
+
+    #Adding SNS Topic to stack
+    # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_sns/README.html
+        topic = sns.Topic(self, "WebsiteMonitoringTopic",
+                          display_name = "Website Monitoring Alerts")
+        
+
+    #TODO - WRITE TO DYNAMO DB, CREATE IT IN STACK/ARCHITECTURE
+    #Table Name : AlarmTable
+    #Partition Key : [AlarmName, STRING]
+    #Sort Key: [Timestamp, STRING]
+        table = dynamodb.Table(self, "AlarmTable",
+                               partition_key=dynamodb.Attribute(
+                                   name = "AlarmName",
+                                   type=dynamodb.AttributeType.STRING
+                               ),
+                               # Need this to log each unique record that fires
+                               sort_key=dynamodb.Attribute(
+                                   name="Timestamp",
+                                   type=dynamodb.AttributeType.STRING
+                               ),
+                               billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+                               removal_policy=RemovalPolicy.DESTROY,
+                               )
+        
+    #Lambda Subscription, needs seperate Lambda function
+        alarmlambda = _lambda.Function(
+            self, "AlarmLambdaFunction",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            code = _lambda.Code.from_asset("lambda"),
+            handler = "alarmhandler.handle_alarm",
+            #reference the dynamodb table created
+            environment={
+                "TABLE_ALARM": table.table_name
+            }
+        )
+        topic.add_subscription(
+            subscriptions.LambdaSubscription(alarmlambda)
+        )
+        # Grant permission to write to database
+        table.grant_write_data(alarmlambda)
+
     #Add cloudwatch
     # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_iam/PolicyStatement.html
 
@@ -54,6 +101,7 @@ class EricStack(Stack):
                 resources=["*"],
                 )
             )
+        
 
         #Link to lambda
         eventRule.add_target(targets.LambdaFunction(mylambda))
@@ -106,16 +154,21 @@ class EricStack(Stack):
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Alarm.html
         #Don't need to hardcode variables as it is inside a loop now.
-            cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
+            response_alarm = cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
                     metric= responsetimedash,
-                    threshold=200,
+                    threshold=1,
                     evaluation_periods=2,
                     comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
                     treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
-            cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
+            #publishes notification from alarm to this sns topic
+            #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/AlarmBase.html#aws_cdk.aws_cloudwatch.AlarmBase.add_alarm_action
+            response_alarm.add_alarm_action(actions.SnsAction(topic))
+            
+            availability_alarm = cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
                     metric=availabilitydash,
                     threshold=1,
                     evaluation_periods=1, 
                     comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
                     treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
+            availability_alarm.add_alarm_action(actions.SnsAction(topic))
         
