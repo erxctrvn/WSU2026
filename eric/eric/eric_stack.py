@@ -46,7 +46,7 @@ class EricStack(Stack):
         eventRule = events.Rule(
             self,
             "myRule",
-            schedule=events.Schedule.rate(Duration.minutes(1)),
+            schedule=events.Schedule.rate(Duration.minutes(15)),
         )
 
     
@@ -166,7 +166,7 @@ class EricStack(Stack):
             
             availability_alarm = cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
                     metric=availabilitydash,
-                    threshold=1,
+                    threshold=200,
                     evaluation_periods=1, 
                     comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
                     treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
