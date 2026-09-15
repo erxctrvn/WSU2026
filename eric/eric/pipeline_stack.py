@@ -4,6 +4,11 @@ from aws_cdk import (
     pipelines,
     SecretValue,
 )   
+
+##Current pipeline protects against deployment level failures like
+##Syntax, missing iports, Permission issues etc. Pipeline will stop and will not move on from Beta --> Gamma --> Prod
+##Can push
+
 from constructs import Construct
 #import website monitoring stack
 from eric.eric_stack import EricStack
@@ -39,6 +44,11 @@ class PipelineStack(Stack):
         )
         #creation of seperate copies of WebsiteMonitoringStage wrapped to my full stack
         #making 3 so if something breaks it never reaches prod
+
+        #beta for integration test    
         pipeline.add_stage(WebsiteMonitoringStage(self, "Beta"))
+        #gamma for functional test
         pipeline.add_stage(WebsiteMonitoringStage(self, "Gamma"))
+        #prod for production
         pipeline.add_stage(WebsiteMonitoringStage(self, "Prod"))
+
