@@ -47,6 +47,8 @@ class PipelineStack(Stack):
 
         #beta for integration test    
         pipeline.add_stage(WebsiteMonitoringStage(self, "Beta"))
+        ##to add unit tests create a variable and use post = [unit tests]
+
         #gamma for functional test
         pipeline.add_stage(WebsiteMonitoringStage(self, "Gamma"))
         #prod for production
