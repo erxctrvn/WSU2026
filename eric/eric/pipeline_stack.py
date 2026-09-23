@@ -45,7 +45,7 @@ class PipelineStack(Stack):
         #creation of seperate copies of WebsiteMonitoringStage wrapped to my full stack
         #making 4 so if something breaks it never reaches prod
 
-        #Alpha for integration test 
+        #Alpha for unit test 
         alpha_stage = pipeline.add_stage(
             WebsiteMonitoringStage(self, "Alpha"),
             # pre because its first stage

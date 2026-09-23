@@ -24,9 +24,10 @@ from aws_cdk import (
 
 )
 from constructs import Construct
+from aws_cdk import CfnOutput
 
 class EricStack(Stack):
-
+    
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -39,6 +40,11 @@ class EricStack(Stack):
             code=_lambda.Code.from_asset("lambda"),
             handler="wiring.helloworldfunc",
         )
+
+        ## cloudformation that attaches outside my deployed stack, pipeline and test
+        ## do not havae to read a stack name in advance now
+        ## solves telling lambda "function_name = "
+        CfnOutput(self, "CrawlerFunctionName", value=mylambda.function_name)
 
     # Create the EventBridge Rule 
     # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_events/Schedule.html
