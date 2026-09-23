@@ -43,17 +43,56 @@ class PipelineStack(Stack):
             ),
         )
         #creation of seperate copies of WebsiteMonitoringStage wrapped to my full stack
-        #making 3 so if something breaks it never reaches prod
+        #making 4 so if something breaks it never reaches prod
 
-        #beta for integration test    
-        pipeline.add_stage(WebsiteMonitoringStage(self, "Beta"))
-        ##to add unit tests create a variable and use post = [unit tests]
+        #Alpha for integration test 
+        alpha_stage = pipeline.add_stage(
+            WebsiteMonitoringStage(self, "Alpha"),
+            # pre because its first stage
+            pre=[
+                pipelines.ShellStep(
+                    "UnitTests",
+                    commands=[
+                        "cd eric",
+                        "python -m pip install -r requirements.txt",
+                        "python -m pytest tests/unit -v",
+                    ],
+                ),
+            ],
+        )
 
-        #gamma for functional test
-        pipeline.add_stage(WebsiteMonitoringStage(self, "Gamma"))
+        #Beta for integration test    
+        beta_stage = pipeline.add_stage(
+            WebsiteMonitoringStage(self, "Beta"),
+            post= [
+                pipelines.ShellStep(
+                    "IntegrationTest",
+                    commands=[
+                        "cd eric",
+                        'python -m pip install -r requirements.txt',
+                        "python -m pytest tests/integration -v",
 
-        #one for unit test
+                    ],
+                ),
+                pipelines.ManualApprovalStep("PromoteToGamma")
+            ],
+        )
         
-
-        #prod for production
+        #Gamma for functional tests
+        gamma-stage = pipeline.add_stage(
+            WebsiteMonitoringStage(self, "Gamma"),
+            post = [
+                pipelines.ShellStep(
+                    "FunctionalTests",
+                    commands =[
+                        "cd eric",
+                        "python -m pip install -r requirements.txt",
+                        "python -m pytest tests/integration -v",
+                    ],
+                ),
+                pipelines.ManualApprovalStep("PromoteToProd"),
+            ],
+        )
+        
+        #Prod for production, no tests or approval needed 
         pipeline.add_stage(WebsiteMonitoringStage(self, "Prod"))
