@@ -62,19 +62,23 @@ class PipelineStack(Stack):
         )
 
         #Beta for integration test    
-        beta_stage = pipeline.add_stage(
-            WebsiteMonitoringStage(self, "Beta"),
-            post= [
+        beta = WebsiteMonitoringStage(self, "Beta")     
+        pipeline.add_stage(                              
+            beta,                               
+            post=[
                 pipelines.ShellStep(
                     "IntegrationTest",
+                    env_from_cfn_outputs={
+                        "CRAWLER_FUNCTION_NAME": beta.crawler_name,
+                        "ALARM_TABLE_NAME": beta.alarm_table,
+                    },
                     commands=[
                         "cd eric",
-                        'python -m pip install -r requirements.txt',
+                        "python -m pip install -r requirements.txt",
                         "python -m pytest tests/integration -v",
-
                     ],
                 ),
-                pipelines.ManualApprovalStep("PromoteToGamma")
+                pipelines.ManualApprovalStep("PromoteToGamma"),
             ],
         )
         
@@ -87,7 +91,7 @@ class PipelineStack(Stack):
                     commands =[
                         "cd eric",
                         "python -m pip install -r requirements.txt",
-                        "python -m pytest tests/integration -v",
+                        "python -m pytest tests/functional -v",
                     ],
                 ),
                 pipelines.ManualApprovalStep("PromoteToProd"),

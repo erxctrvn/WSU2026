@@ -44,7 +44,7 @@ class EricStack(Stack):
         ## cloudformation that attaches outside my deployed stack, pipeline and test
         ## do not havae to read a stack name in advance now
         ## solves telling lambda "function_name = "
-        CfnOutput(self, "CrawlerFunctionName", value=mylambda.function_name)
+        self.crawler_name_output = CfnOutput(self, "CrawlerFunctionName", value=mylambda.function_name)
 
     # Create the EventBridge Rule 
     # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_events/Schedule.html
@@ -80,6 +80,8 @@ class EricStack(Stack):
                                billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
                                removal_policy=RemovalPolicy.DESTROY,
                                )
+        
+        self.alarm_table_output = CfnOutput(self, "AlarmTableName", value=table.table_name)
         
     #Lambda Subscription, needs seperate Lambda function
         alarmlambda = _lambda.Function(
@@ -123,7 +125,7 @@ class EricStack(Stack):
         dashboard = cloudwatch.Dashboard(self, "MetricMonitoringDashboard")
 
 
-
+        stack_name = Stack.of(self).stack_name
         # To-do create a for loop for each website linking to the json file that lambda uses
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Metric.html
         for url in websites:
@@ -154,6 +156,7 @@ class EricStack(Stack):
 
 
 
+
         #Creating a cloudwatch alarm belongs in CDK/Infrastructure
         #Because it manages lifecycle, trhesholds and permissions.,
         #Cloudwatch alarm can invoke Lambda or through eventbridge
@@ -161,6 +164,7 @@ class EricStack(Stack):
         #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Alarm.html
         #Don't need to hardcode variables as it is inside a loop now.
             response_alarm = cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
+                    alarm_name=f"{stack_name}-ResponseTime-{alarm_id_safe}",
                     metric= responsetimedash,
                     threshold=1,
                     evaluation_periods=2,
@@ -171,8 +175,9 @@ class EricStack(Stack):
             response_alarm.add_alarm_action(actions.SnsAction(topic))
             
             availability_alarm = cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
+                    alarm_name=f"{stack_name}-Availability-{alarm_id_safe}",
                     metric=availabilitydash,
-                    threshold=200,
+                    threshold=1,
                     evaluation_periods=1, 
                     comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
                     treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
