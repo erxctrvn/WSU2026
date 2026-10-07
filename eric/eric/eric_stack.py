@@ -39,6 +39,7 @@ class EricStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_13,
             code=_lambda.Code.from_asset("lambda"),
             handler="wiring.helloworldfunc",
+            timeout= Duration.seconds(30),
         )
 
         ## cloudformation that attaches outside my deployed stack, pipeline and test

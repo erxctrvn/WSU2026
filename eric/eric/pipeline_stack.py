@@ -3,6 +3,7 @@ from aws_cdk import (
     Stage, #stage is a container that can get deployed together
     pipelines,
     SecretValue,
+    aws_iam as iam
 )   
 
 ##Current pipeline protects against deployment level failures like
@@ -18,7 +19,10 @@ class WebsiteMonitoringStage(Stage):
     #instantiate existing application stack
     def __init__(self, scope: Construct, construct_id: str, **kwargs):
         super().__init__(scope, construct_id,**kwargs)
-        EricStack(self, "EricStack")
+        stack = EricStack(self, "EricStack")
+        #pin cfnoutputs so pipeline can read them
+        self.crawler_name = stack.crawler_name_output
+        self.alarm_table = stack.alarm_table_output
 
 class PipelineStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, ** kwargs):
@@ -62,11 +66,11 @@ class PipelineStack(Stack):
         )
 
         #Beta for integration test    
-        beta = WebsiteMonitoringStage(self, "Beta")     
+        beta = WebsiteMonitoringStage(self, "Beta")       
         pipeline.add_stage(                              
             beta,                               
             post=[
-                pipelines.ShellStep(
+                pipelines.CodeBuildStep(
                     "IntegrationTest",
                     env_from_cfn_outputs={
                         "CRAWLER_FUNCTION_NAME": beta.crawler_name,
@@ -76,6 +80,19 @@ class PipelineStack(Stack):
                         "cd eric",
                         "python -m pip install -r requirements.txt",
                         "python -m pytest tests/integration -v",
+                    ],
+                    # adds permission to third role only
+                    role_policy_statements=[
+                        iam.PolicyStatement(
+                            actions=[
+                                "lambda:InvokeFunction",          
+                                "cloudwatch:GetMetricStatistics", 
+                                "dynamodb:PutItem",               
+                                "dynamodb:GetItem",               
+                                "dynamodb:DeleteItem",            
+                            ],
+                            resources=["*"],
+                        ),
                     ],
                 ),
                 pipelines.ManualApprovalStep("PromoteToGamma"),

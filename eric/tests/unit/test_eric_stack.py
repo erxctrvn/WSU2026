@@ -76,3 +76,11 @@ def test_eventbridge_rule_runs_every_15_minutes(template):
     template.has_resource_properties("AWS::Events::Rule", {
         "ScheduleExpression": "rate(15 minutes)",
     })
+# checks that cloudformation template contains availability alarm
+def test_availability_alarm_has_correct_config(template):
+    template.has_resource_properties("AWS::CloudWatch::Alarm", {
+        "MetricName": "Availability",
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "EvaluationPeriods": 1,
+    })
