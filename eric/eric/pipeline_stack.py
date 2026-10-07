@@ -79,7 +79,7 @@ class PipelineStack(Stack):
         )
         
         #Gamma for functional tests
-        gamma-stage = pipeline.add_stage(
+        gamma_stage = pipeline.add_stage(
             WebsiteMonitoringStage(self, "Gamma"),
             post = [
                 pipelines.ShellStep(
