@@ -114,6 +114,18 @@ class EricStack(Stack):
 
         #Link to lambda
         eventRule.add_target(targets.LambdaFunction(mylambda))
+        #Storing the websites in a DynamoDB managed through CRUD API
+        #Used by wiring.py and CRUD Lambda
+        #Using URL as partition key 
+        targets_table = dynamodb.Table(self, "TargetsTable",
+            partition_key=dynamodb.Attribute(
+                name="url",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        self.targets_table_output = CfnOutput(self, "TargetsTableName", value=targets_table.table_name)
         
         # Create the dashboard for cloudwatch (using the metrics obtained)
 
