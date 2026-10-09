@@ -117,6 +117,7 @@ class EricStack(Stack):
         #Storing the websites in a DynamoDB managed through CRUD API
         #Used by wiring.py and CRUD Lambda
         #Using URL as partition key 
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dynamodb/Table.html
         targets_table = dynamodb.Table(self, "TargetsTable",
             partition_key=dynamodb.Attribute(
                 name="url",
@@ -128,7 +129,6 @@ class EricStack(Stack):
         self.targets_table_output = CfnOutput(self, "TargetsTableName", value=targets_table.table_name)
         
         # Create the dashboard for cloudwatch (using the metrics obtained)
-
         # Use os import to read same websitesjson as lambda
         # good for scale, dont need to update both files
         websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
@@ -136,6 +136,10 @@ class EricStack(Stack):
             websites = json.load(f)
 
         dashboard = cloudwatch.Dashboard(self, "MetricMonitoringDashboard")
+        #Add environment tells the crawler the table name made above
+        mylambda.add_environment("TABLE_TARGETS", targets_table.table_name)
+        #Gives read only permissions to the crawler 
+        targets_table.grant_read_data(mylambda)
 
 
         stack_name = Stack.of(self).stack_name

@@ -6,11 +6,20 @@
 #wiring.py is used for checking websites
 import json,time,urllib.request,boto3
 cloudwatch = boto3.client('cloudwatch')
+dynamodb = boto3.resource('dynamodb')
 
 def loadmultwebs():
-    with open('websites.json') as f:
-        # loading json instead of hardcoding
-        return json.load(f)
+    #Function now scans the table where it used to open json file.
+    table = dynamodb.Table(os.environ['TABLE_TARGETS'])
+    urls = []
+    scan_args = {}
+    while True:
+        page = table.scan(**scan_args)
+        urls.extend(item['url'] for item in page['Items'])
+        if 'LastEvaluatedKey' not in page:
+            break
+        scan_args['ExclusiveStartKey'] = page['LastEvaluatedKey']
+    return urls
 
 def crawl_func(url): #used for just one website
     start_time = time.time()
