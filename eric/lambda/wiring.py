@@ -10,6 +10,7 @@ dynamodb = boto3.resource('dynamodb')
 
 def loadmultwebs():
     #Function now scans the table where it used to open json file.
+    #https://docs.aws.amazon.com/boto3/latest/guide/dynamodb.html
     table = dynamodb.Table(os.environ['TABLE_TARGETS'])
     urls = []
     scan_args = {}
