@@ -21,6 +21,8 @@ from aws_cdk import (
     aws_dynamodb as dynamodb,
     RemovalPolicy,
     Duration,
+    ArnFormat,
+    aws_apigateway as apigateway,
 
 )
 from constructs import Construct
@@ -140,6 +142,69 @@ class EricStack(Stack):
         mylambda.add_environment("TABLE_TARGETS", targets_table.table_name)
         #Gives read only permissions to the crawler 
         targets_table.grant_read_data(mylambda)
+        stack_name = Stack.of(self).stack_name
+
+        #Tells stack to deploy crud.py as a Lambda function
+        #Hands the four settings it needs
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_lambda/Function.html
+        crudlambda = _lambda.Function(
+            self, "CrudLambdaFunction",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            code=_lambda.Code.from_asset("lambda"),
+            handler="crud.handler",
+            timeout=Duration.seconds(30),
+            environment={
+                "TABLE_TARGETS": targets_table.table_name,
+                "TABLE_ALARM": table.table_name,
+                "TOPIC_ARN": topic.topic_arn,
+                "STACK_NAME": stack_name,
+            },
+        )
+        #Grant permission for CRUD Lambda to do what crud.py wnats
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dynamodb/Table.html
+        targets_table.grant_read_write_data(crudlambda)
+        table.grant_read_write_data(crudlambda)
+        crudlambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms"],
+                resources=[self.format_arn(
+                    service="cloudwatch",
+                    resource="alarm",
+                    resource_name=f"{stack_name}-*",
+                    arn_format=ArnFormat.COLON_RESOURCE_NAME,
+                )],
+            )
+        )
+        crudlambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["cloudwatch:DescribeAlarms"],
+                resources=["*"],
+            )
+        )
+
+        #API Gateway Gives HTTPS URL, receives requests from net nad passes it to CRUD Lambda
+        #RESTful API Gateway, RESTful because resources have own URLS, HTTP method says what to do
+        #Status code reports outcome
+        #Stateless
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_apigateway/RestApi.html
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_apigateway/LambdaIntegration.html
+        api = apigateway.RestApi(
+            self, "TargetsApi",
+            rest_api_name=f"{stack_name}-TargetsApi",
+            description="CRUD API for the web crawler's target list",
+            deploy_options=apigateway.StageOptions(stage_name="v1"),
+            cloud_watch_role=False,
+        )
+        crud_integration = apigateway.LambdaIntegration(crudlambda)
+        targets_resource = api.root.add_resource("targets")
+        target_resource = targets_resource.add_resource("{url}")
+        for method in ["GET", "POST", "PUT", "DELETE"]:
+            targets_resource.add_method(method, crud_integration)
+        for method in ["GET", "PUT", "DELETE"]:
+            target_resource.add_method(method, crud_integration)
+
+        self.api_url_output = CfnOutput(self, "ApiUrl", value=api.url)
+
 
 
         stack_name = Stack.of(self).stack_name

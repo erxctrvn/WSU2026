@@ -17,9 +17,9 @@ def template():
     return assertions.Template.from_stack(stack)
 
 #confirms that mylambda(crawler) and alarmlambda are actually declared
-def test_two_lambda_functions_created(template):
-    """mylambda (crawler) and alarmlambda (alarm handler) should both exist."""
-    template.resource_count_is("AWS::Lambda::Function", 2)
+def test_lambda_functions_created(template):
+    """mylambda (crawler), alarmlambda (alarm handler) and crudlambda (CRUD API)."""
+    template.resource_count_is("AWS::Lambda::Function", 3)
  
 #checks crawler lambda is pointing at right function (helloworldfunc)
 def test_crawler_lambda_handler_is_correct(template):
@@ -92,3 +92,20 @@ def test_targets_table_has_url_partition_key(template):
             {"AttributeName": "url", "KeyType": "HASH"},
         ],
     })
+
+#Checks CRUD lambda exists and points to right crud lambda file
+def test_crud_lambda_handler_is_correct(template):
+    template.has_resource_properties("AWS::Lambda::Function", {
+        "Handler": "crud.handler",
+        "Runtime": "python3.13",
+    })
+
+#Tests API has all CRUD routes nad is public
+def test_api_exposes_all_crud_methods(template):
+    template.resource_count_is("AWS::ApiGateway::RestApi", 1)
+    template.resource_count_is("AWS::ApiGateway::Method", 7)
+    for method in ["GET", "POST", "PUT", "DELETE"]:
+        template.has_resource_properties("AWS::ApiGateway::Method", {
+            "HttpMethod": method,
+            "AuthorizationType": "NONE",
+        })
