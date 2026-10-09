@@ -84,3 +84,11 @@ def test_availability_alarm_has_correct_config(template):
         "ComparisonOperator": "LessThanThreshold",
         "EvaluationPeriods": 1,
     })
+
+#Test to check that stack has url as partition key
+def test_targets_table_has_url_partition_key(template):
+    template.has_resource_properties("AWS::DynamoDB::Table", {
+        "KeySchema": [
+            {"AttributeName": "url", "KeyType": "HASH"},
+        ],
+    })

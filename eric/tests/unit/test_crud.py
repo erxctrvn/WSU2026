@@ -41,10 +41,24 @@ def test_post_saves_target_and_creates_two_alarms(aws):
     assert aws.cloudwatch.put_metric_alarm.call_count == 2
     assert json.loads(response["body"])["alarms"] == [RESPONSE_ALARM, AVAILABILITY_ALARM]
 
-#Test to check that stack has url as partition key
-def test_targets_table_has_url_partition_key(template):
-    template.has_resource_properties("AWS::DynamoDB::Table", {
-        "KeySchema": [
-            {"AttributeName": "url", "KeyType": "HASH"},
-        ],
-    })
+#Tests DELETE by sending fake DELETE
+# tests that row was deleted, alarms deleted, and hsitory is deleted
+def test_delete_cascades_to_alarms_and_alarm_history(aws):
+    aws.targets_table.delete_item.return_value = {"Attributes": {"url": SITE}}
+    aws.alarm_table.query.side_effect = [
+        {"Items": [{"AlarmName": RESPONSE_ALARM, "Timestamp": "2026-01-01T00:00:00+00:00"}]},
+        {"Items": [{"AlarmName": AVAILABILITY_ALARM, "Timestamp": "2026-01-02T00:00:00+00:00"},
+                   {"AlarmName": AVAILABILITY_ALARM, "Timestamp": "2026-01-03T00:00:00+00:00"}]},
+    ]
+    event = {"httpMethod": "DELETE", "pathParameters": {"url": "https%3A%2F%2Fexample.com%2F"}}
+
+    response = crud.handler(event, None)
+
+    assert response["statusCode"] == 200
+    assert aws.targets_table.delete_item.call_args.kwargs["Key"] == {"url": SITE}
+    aws.cloudwatch.delete_alarms.assert_called_once_with(AlarmNames=[RESPONSE_ALARM, AVAILABILITY_ALARM])
+    batch = aws.alarm_table.batch_writer.return_value.__enter__.return_value
+    assert batch.delete_item.call_count == 3
+    assert json.loads(response["body"])["historyRowsDeleted"] == 3
+
+

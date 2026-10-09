@@ -40,7 +40,9 @@ def alarm_names(url):
         "Availability": f"{STACK_NAME}-Availability-{safe_id}",
     }
 
-#Returns error message or none if URL is fine
+#CREATE AND READ HELPERS
+
+#Returns error message or none if URL is fine - CREATE
 def validate_url(url):
     if not isinstance(url, str) or not url.strip():
         return "url is required"
@@ -109,6 +111,9 @@ def create_alarms(url):
     return list(names.values())
 
 #Reads every URL from the table
+#https://docs.aws.amazon.com/boto3/latest/reference/services/dynamodb/table/scan.html
+#(scan, get item, put item)
+# READ
 def scan_targets():
     urls = []
     scan_args = {}
@@ -126,6 +131,8 @@ def list_targets():
     return respond(200, {"count": len(urls), "targets": [{"url": url} for url in urls]})
 
 # response for GET /targets{url}
+#(describe alarm (read only state) https://docs.aws.amazon.com/boto3/latest/reference/services/cloudwatch/client/describe_alarms.html)
+# READ
 def get_target(url):
     if "Item" not in targets_table.get_item(Key={"url": url}):
         return respond(404, {"error": "target not found", "url": url})
@@ -134,8 +141,10 @@ def get_target(url):
     alarms = [{"name": a["AlarmName"], "state": a["StateValue"]} for a in found]
     return respond(200, {"url": url, "alarms": alarms})
 
-# write a row only if it is a new URL
+# write a row only if it is a new URL - CREATE
 def put_new_target(url):
+    #only write if following is true
+    #https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html
     try:
         targets_table.put_item(Item={"url": url}, ConditionExpression="attribute_not_exists(#u)",
                                ExpressionAttributeNames={"#u": "url"})
@@ -145,8 +154,9 @@ def put_new_target(url):
             return False
         raise
 
-#response for POST /targets
+#response for POST /targets - CREATE
 def create_target(event):
+    # CREATE
     url, error = url_from_body(event)
     if error:
         return respond(400, {"error": error})
@@ -155,7 +165,7 @@ def create_target(event):
     alarms = create_alarms(url)
     return respond(201, {"url": url, "alarms": alarms})
 
-#API will call this for every request
+#API will call this for every request - READ
 def handler(event, context):
     method = event.get("httpMethod")
     url = url_from_request(event)
@@ -164,7 +174,67 @@ def handler(event, context):
             return get_target(url) if url else list_targets()
         if method == "POST":
             return create_target(event)
+        if method in ("PUT", "DELETE") and not url:
+            return respond(400, {"error": "say which target: /targets/{url-encoded url} or /targets?url=..."})
+        if method == "PUT":
+            return update_target(url, event)
+        if method == "DELETE":
+            return delete_target(url)
         return respond(405, {"error": f"method {method} not allowed"})
     except Exception as e:
         print(f"Unhandled error on {method} {url}: {e}")
         return respond(500, {"error": "internal server error"})
+
+#UPDATE AND DELETE HELPERS
+
+#DELETE
+def purge_alarm_history(alarm_name):
+    deleted = 0
+    query_args = {
+        "KeyConditionExpression": "AlarmName = :name",
+        "ExpressionAttributeValues": {":name": alarm_name},
+        "ProjectionExpression": "AlarmName, #ts",
+        "ExpressionAttributeNames": {"#ts": "Timestamp"},
+    }
+    with alarm_table.batch_writer() as batch:
+        while True:
+            page = alarm_table.query(**query_args)
+            for item in page["Items"]:
+                batch.delete_item(Key={"AlarmName": item["AlarmName"], "Timestamp": item["Timestamp"]})
+                deleted += 1
+            if "LastEvaluatedKey" not in page:
+                break
+            query_args["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+    return deleted
+
+
+def delete_alarms_and_history(url):
+    names = list(alarm_names(url).values())
+    cloudwatch.delete_alarms(AlarmNames=names)
+    history_rows = sum(purge_alarm_history(name) for name in names)
+    return names, history_rows
+
+#Swap the row, two alarms, and history rows - UPDATE
+def update_target(old_url, event):
+    new_url, error = url_from_body(event)
+    if error:
+        return respond(400, {"error": error})
+    if "Item" not in targets_table.get_item(Key={"url": old_url}):
+        return respond(404, {"error": "target not found", "url": old_url})
+    if new_url == old_url:
+        return respond(200, {"url": new_url, "alarms": create_alarms(new_url)})
+    if not put_new_target(new_url):
+        return respond(409, {"error": "target already exists", "url": new_url})
+    alarms = create_alarms(new_url)
+    targets_table.delete_item(Key={"url": old_url})
+    delete_alarms_and_history(old_url)
+    return respond(200, {"url": new_url, "replaced": old_url, "alarms": alarms})
+
+#Removes row and if there is alarm and history remove those as well
+# DELETE helper
+def delete_target(url):
+    old = targets_table.delete_item(Key={"url": url}, ReturnValues="ALL_OLD")
+    if "Attributes" not in old:
+        return respond(404, {"error": "target not found", "url": url})
+    alarms, history_rows = delete_alarms_and_history(url)
+    return respond(200, {"deleted": url, "alarmsDeleted": alarms, "historyRowsDeleted": history_rows})
