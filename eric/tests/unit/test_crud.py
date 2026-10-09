@@ -40,3 +40,11 @@ def test_post_saves_target_and_creates_two_alarms(aws):
     assert aws.targets_table.put_item.call_args.kwargs["Item"] == {"url": SITE}
     assert aws.cloudwatch.put_metric_alarm.call_count == 2
     assert json.loads(response["body"])["alarms"] == [RESPONSE_ALARM, AVAILABILITY_ALARM]
+
+#Test to check that stack has url as partition key
+def test_targets_table_has_url_partition_key(template):
+    template.has_resource_properties("AWS::DynamoDB::Table", {
+        "KeySchema": [
+            {"AttributeName": "url", "KeyType": "HASH"},
+        ],
+    })
