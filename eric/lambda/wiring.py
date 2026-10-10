@@ -4,7 +4,7 @@
 #CDK is for infrastructure creation
 #SDK is for runtime.
 #wiring.py is used for checking websites
-import json,time,urllib.request,boto3
+import json,os,time,urllib.request,boto3
 cloudwatch = boto3.client('cloudwatch')
 dynamodb = boto3.resource('dynamodb')
 
