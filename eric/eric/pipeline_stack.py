@@ -23,6 +23,8 @@ class WebsiteMonitoringStage(Stage):
         #pin cfnoutputs so pipeline can read them
         self.crawler_name = stack.crawler_name_output
         self.alarm_table = stack.alarm_table_output
+        self.targets_table = stack.targets_table_output
+        self.api_url = stack.api_url_output
 
 class PipelineStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, ** kwargs):
@@ -75,6 +77,7 @@ class PipelineStack(Stack):
                     env_from_cfn_outputs={
                         "CRAWLER_FUNCTION_NAME": beta.crawler_name,
                         "ALARM_TABLE_NAME": beta.alarm_table,
+                        "TARGETS_TABLE_NAME": beta.targets_table,
                     },
                     commands=[
                         "cd eric",
@@ -89,7 +92,8 @@ class PipelineStack(Stack):
                                 "cloudwatch:GetMetricStatistics", 
                                 "dynamodb:PutItem",               
                                 "dynamodb:GetItem",               
-                                "dynamodb:DeleteItem",            
+                                "dynamodb:DeleteItem", 
+                                "dynamodb:Scan",           
                             ],
                             resources=["*"],
                         ),
@@ -99,16 +103,27 @@ class PipelineStack(Stack):
             ],
         )
         
-        #Gamma for functional tests
+        #Gamma for functional tests, has API URL for test
+        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.pipelines/CodeBuildStep.html
+        gamma = WebsiteMonitoringStage(self, "Gamma")
         gamma_stage = pipeline.add_stage(
-            WebsiteMonitoringStage(self, "Gamma"),
+            gamma,
             post = [
-                pipelines.ShellStep(
+                pipelines.CodeBuildStep(
                     "FunctionalTests",
+                    env_from_cfn_outputs={
+                        "API_URL": gamma.api_url,
+                    },
                     commands =[
                         "cd eric",
                         "python -m pip install -r requirements.txt",
                         "python -m pytest tests/functional -v",
+                    ],
+                    role_policy_statements=[
+                        iam.PolicyStatement(
+                            actions=["cloudwatch:DescribeAlarms"],
+                            resources=["*"],
+                        ),
                     ],
                 ),
                 pipelines.ManualApprovalStep("PromoteToProd"),

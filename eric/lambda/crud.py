@@ -1,3 +1,4 @@
+#Different from wiring lambda as it fires through API requests
 import json
 import os
 import re
@@ -165,8 +166,31 @@ def create_target(event):
     alarms = create_alarms(url)
     return respond(201, {"url": url, "alarms": alarms})
 
+#Moving alarm to lambda for CRUD changes to apply at runtime
+#fills new table and creates alarm 
+def seed_targets(urls):
+    for url in urls:
+        targets_table.put_item(Item={"url": url})
+        create_alarms(url)
+    return {"seeded": len(urls)}
+
+#cleans up alarm on delete
+#https://docs.aws.amazon.com/boto3/latest/reference/services/cloudwatch/client/delete_alarms.html
+def purge_all_alarms():
+    names = []
+    for page in cloudwatch.get_paginator("describe_alarms").paginate(AlarmNamePrefix=f"{STACK_NAME}-"):
+        names.extend(alarm["AlarmName"] for alarm in page["MetricAlarms"])
+    for i in range(0, len(names), 100):
+        cloudwatch.delete_alarms(AlarmNames=names[i:i + 100])
+    return {"alarmsDeleted": len(names)}
+
+
 #API will call this for every request - READ
 def handler(event, context):
+    if event.get("action") == "seed":
+        return seed_targets(event.get("urls", []))
+    if event.get("action") == "purge":
+        return purge_all_alarms()
     method = event.get("httpMethod")
     url = url_from_request(event)
     try:

@@ -51,20 +51,6 @@ def test_alarm_table_uses_pay_per_request_billing(template):
         "BillingMode": "PAY_PER_REQUEST",
     })
  
-#locks in the response time values from eric_stack, if changed it will fail
-def test_response_time_alarm_has_correct_config(template):
-    template.has_resource_properties("AWS::CloudWatch::Alarm", {
-        "MetricName": "ResponseTime",
-        "Threshold": 1,
-        "ComparisonOperator": "GreaterThanThreshold",
-        "EvaluationPeriods": 2,
-    })
-
-
-def test_alarm_count_matches_sites_times_metrics(template):
-    """3 websites x 2 alarms each (ResponseTime, Availability) = 6 alarms."""
-    template.resource_count_is("AWS::CloudWatch::Alarm", 6)
- 
 #confirms that notification topic is declared
 def test_sns_topic_created_with_display_name(template):
     template.has_resource_properties("AWS::SNS::Topic", {
@@ -75,14 +61,6 @@ def test_sns_topic_created_with_display_name(template):
 def test_eventbridge_rule_runs_every_15_minutes(template):
     template.has_resource_properties("AWS::Events::Rule", {
         "ScheduleExpression": "rate(15 minutes)",
-    })
-# checks that cloudformation template contains availability alarm
-def test_availability_alarm_has_correct_config(template):
-    template.has_resource_properties("AWS::CloudWatch::Alarm", {
-        "MetricName": "Availability",
-        "Threshold": 1,
-        "ComparisonOperator": "LessThanThreshold",
-        "EvaluationPeriods": 1,
     })
 
 #Test to check that stack has url as partition key
@@ -109,3 +87,24 @@ def test_api_exposes_all_crud_methods(template):
             "HttpMethod": method,
             "AuthorizationType": "NONE",
         })
+
+def test_lambda_functions_created(template):
+    """mylambda (crawler), alarmlambda (alarm handler), crudlambda (CRUD API),
+    plus one CDK adds itself to run the seeding step."""
+    template.resource_count_is("AWS::Lambda::Function", 4)
+
+#Testing if stack creates no alarms as it is in Lambda now
+def test_stack_declares_no_alarms(template):
+    """Alarms are created by the CRUD Lambda now. Two owners would overwrite each other."""
+    template.resource_count_is("AWS::CloudWatch::Alarm", 0)
+
+#Making sure crawler is told name of the targets in table
+def test_crawler_reads_targets_from_dynamodb(template):
+    template.has_resource_properties("AWS::Lambda::Function", {
+        "Handler": "wiring.helloworldfunc",
+        "Environment": {"Variables": {"TABLE_TARGETS": assertions.Match.any_value()}},
+    })
+
+#Tests to see if stack still creates one dashboard
+def test_dashboard_created(template):
+    template.resource_count_is("AWS::CloudWatch::Dashboard", 1)

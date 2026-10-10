@@ -61,4 +61,25 @@ def test_delete_cascades_to_alarms_and_alarm_history(aws):
     assert batch.delete_item.call_count == 3
     assert json.loads(response["body"])["historyRowsDeleted"] == 3
 
+def alarms_created(aws):
+    return {call.kwargs["MetricName"]: call.kwargs
+            for call in aws.cloudwatch.put_metric_alarm.call_args_list}
+
+
+def test_response_time_alarm_has_correct_config(aws):
+    crud.handler(post_event(SITE), None)
+
+    alarm = alarms_created(aws)["ResponseTime"]
+    assert alarm["Threshold"] == 1
+    assert alarm["ComparisonOperator"] == "GreaterThanThreshold"
+    assert alarm["EvaluationPeriods"] == 2
+
+#Tests to see if when site is added if availability alarm is set to fire below 1 after a check
+def test_availability_alarm_has_correct_config(aws):
+    crud.handler(post_event(SITE), None)
+
+    alarm = alarms_created(aws)["Availability"]
+    assert alarm["Threshold"] == 1
+    assert alarm["ComparisonOperator"] == "LessThanThreshold"
+    assert alarm["EvaluationPeriods"] == 1
 

@@ -9,6 +9,8 @@ class WebsiteMonitoringStage(Stage):
         stack = EricStack(self, "EricStack")
         self.crawler_name = stack.crawler_name_output
         self.alarm_table = stack.alarm_table_output
+        self.targets_table = stack.targets_table_output
+        self.api_url = stack.api_url_output
 
 
     

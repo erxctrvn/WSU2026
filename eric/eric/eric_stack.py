@@ -17,12 +17,12 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
     aws_sns as sns,
     aws_sns_subscriptions as subscriptions,
-    aws_cloudwatch_actions as actions,
     aws_dynamodb as dynamodb,
     RemovalPolicy,
     Duration,
     ArnFormat,
     aws_apigateway as apigateway,
+    custom_resources as cr,
 
 )
 from constructs import Construct
@@ -130,14 +130,22 @@ class EricStack(Stack):
         )
         self.targets_table_output = CfnOutput(self, "TargetsTableName", value=targets_table.table_name)
         
-        # Create the dashboard for cloudwatch (using the metrics obtained)
-        # Use os import to read same websitesjson as lambda
-        # good for scale, dont need to update both files
-        websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
-        with open(websites_path) as f:
-            websites = json.load(f)
-
         dashboard = cloudwatch.Dashboard(self, "MetricMonitoringDashboard")
+
+        def all_websites(metric_name):
+            return cloudwatch.MathExpression(
+                expression=f"SEARCH('{{WebsiteMonitoring,Website}} MetricName=\"{metric_name}\"', 'Average', 300)",
+                using_metrics={},
+                label="",
+            )
+        
+        #https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Dashboards.html
+        dashboard.add_widgets(
+            cloudwatch.GraphWidget(title="ResponseTime (ms) - all websites", left=[all_websites("ResponseTime")]),
+            cloudwatch.GraphWidget(title="HTTPS Status - all websites", left=[all_websites("StatusCode")]),
+            cloudwatch.GraphWidget(title="Availability - all websites", left=[all_websites("Availability")]),
+        )
+        
         #Add environment tells the crawler the table name made above
         mylambda.add_environment("TABLE_TARGETS", targets_table.table_name)
         #Gives read only permissions to the crawler 
@@ -205,63 +213,42 @@ class EricStack(Stack):
 
         self.api_url_output = CfnOutput(self, "ApiUrl", value=api.url)
 
+        #Make cloudformation invode CRUD Lambda when stage is first deployed, and when stack is deleted
+        #Cleans up alarms and seeds table
+        websites_path = os.path.join(os.path.dirname(__file__), "..", "lambda", "websites.json")
+        with open(websites_path) as f:
+            websites = json.load(f)
 
-
-        stack_name = Stack.of(self).stack_name
-        # To-do create a for loop for each website linking to the json file that lambda uses
-        # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Metric.html
-        for url in websites:
-            alarm_id_safe = url.replace("https://", "").replace("/","").replace(".","")
-
-            responsetimedash = cloudwatch.Metric(
-                namespace="WebsiteMonitoring",
-                metric_name="ResponseTime",
-                dimensions_map={"Website": url},
-            )
-            statuscodedash = cloudwatch.Metric(
-                namespace="WebsiteMonitoring",
-                metric_name= "StatusCode",
-                dimensions_map={"Website": url},
-            )
-            availabilitydash = cloudwatch.Metric(
-                namespace="WebsiteMonitoring", 
-                metric_name="Availability",
-                dimensions_map={"Website": url},
-            ) 
-            # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Dashboard.html
-            dashboard.add_widgets(
-                cloudwatch.GraphWidget(title=f"ResponseTime - {url}", left=[responsetimedash]),
-                cloudwatch.GraphWidget(title=f"HTTPS Status- {url}", left=[statuscodedash]),
-                cloudwatch.GraphWidget(title=f"Availability- {url}", left=[availabilitydash]),
-            )
-
-
-
-
-
-        #Creating a cloudwatch alarm belongs in CDK/Infrastructure
-        #Because it manages lifecycle, trhesholds and permissions.,
-        #Cloudwatch alarm can invoke Lambda or through eventbridge
-        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/ComparisonOperator.html#aws_cdk.aws_cloudwatch.ComparisonOperator
-        #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Alarm.html
-        #Don't need to hardcode variables as it is inside a loop now.
-            response_alarm = cloudwatch.Alarm(self, f"AlarmFromResponseTime-{alarm_id_safe}",
-                    alarm_name=f"{stack_name}-ResponseTime-{alarm_id_safe}",
-                    metric= responsetimedash,
-                    threshold=1,
-                    evaluation_periods=2,
-                    comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
-                    treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
-            #publishes notification from alarm to this sns topic
-            #https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/AlarmBase.html#aws_cdk.aws_cloudwatch.AlarmBase.add_alarm_action
-            response_alarm.add_alarm_action(actions.SnsAction(topic))
-            
-            availability_alarm = cloudwatch.Alarm(self, f"AlarmFromURLStatus-{alarm_id_safe}",
-                    alarm_name=f"{stack_name}-Availability-{alarm_id_safe}",
-                    metric=availabilitydash,
-                    threshold=1,
-                    evaluation_periods=1, 
-                    comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
-                    treat_missing_data=cloudwatch.TreatMissingData.BREACHING)
-            availability_alarm.add_alarm_action(actions.SnsAction(topic))
-        
+        seed_call = cr.AwsSdkCall(
+            service="Lambda",
+            action="invoke",
+            parameters={
+                "FunctionName": crudlambda.function_name,
+                "Payload": json.dumps({"action": "seed", "urls": websites}),
+            },
+            physical_resource_id=cr.PhysicalResourceId.of("SeedTargets"),
+            output_paths=["StatusCode"],
+        )
+        seed = cr.AwsCustomResource(
+            self, "SeedTargets",
+            on_create=seed_call,
+            on_update=seed_call,
+            on_delete=cr.AwsSdkCall(
+                service="Lambda",
+                action="invoke",
+                parameters={
+                    "FunctionName": crudlambda.function_name,
+                    "Payload": json.dumps({"action": "purge"}),
+                },
+                output_paths=["StatusCode"],
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_statements([
+                iam.PolicyStatement(
+                    actions=["lambda:InvokeFunction"],
+                    resources=[crudlambda.function_arn],
+                ),
+            ]),
+            install_latest_aws_sdk=False,
+        )
+        seed.node.add_dependency(crudlambda)
+        seed.node.add_dependency(targets_table)
