@@ -43,27 +43,123 @@ Every 15 minutes EventBridge will trigger the crawler. For each URL in the targe
 
 Each website has two alarms named afte rthe stack and the website. The reponseTime alarm fires when the average response time is abvoe the threshhold for two consecutive periods. The Availability alarm fires when availability drops below 1. When an alarm changes fires, CloudWatch will notify the SNS topic, and the alarm handler records the change in the alarm history table.
 
-# How to run it 
-- git clone <fork-url>
-- cd eric
-- python -m venv .venv
-- .venv\Scripts\Activate.ps1
-- python -m pip install -r requirements.txt
-- cdk bootstrap
-- cdk deploy
+### Removing a website
 
-# Viewing Metrics and Dashboard & Alarm History
-To view dashboard with metrics :
-- AWS Console -> CloudWatch -> Metrics -> Dashboards -> WebsiteMonitoring.
-To view Alarm History
-- AWS Console -> DynamoDB -> Tables -> AlarmTable -> Explore table items.
+`DELETE /targets/{url}`. It removes the item from the targets table, deletes both of the website's alarms, and deletes every row those alarms wrote to the alarm history table.
+
+## The target list API
+
+- `GET /targets` lists every target.
+- `POST /targets` adds a target and creates its alarms.
+- `GET /targets/{url}` reads one target and the current state of its alarms.
+- `PUT /targets/{url}` replaces a target's URL, replacing its alarms too.
+- `DELETE /targets/{url}` deletes a target, its alarms and its alarm history.
+
+The API is RESTful so the target list is a resource with its own URL, the HTTP method states the operation, status codes report the outcome, and each request is stateless, all state is held in DynamoDB
+
+```powershell
+$api = "https://<api-id>.execute-api.ap-southeast-2.amazonaws.com/v1/targets"
+
+# List
+Invoke-RestMethod $api
+
+# Add
+Invoke-RestMethod $api -Method Post -ContentType "application/json" -Body '{"url": "https://example.com/"}'
+
+# Delete
+Invoke-RestMethod "$api/$([uri]::EscapeDataString('https://example.com/'))" -Method Delete
+```
 
 
-# CDK instructions and scaling more Websites
-Add a new URL to the 'websites.json' file and redeploy:
-- cdk deploy
-After deployment, destroy architecture by : 
-- cdk destroy
+## Design Decisions
+
+### One Lambda for all CRUD operations
+
+API Gateway sends every request to one CRUD Lambda. This keeps validation, alarm naming, and error handling all in one place.
+
+### The CRUD Lambda owns the alarms
+
+In the Web Health project, the CDK stack created the alarms in a loop over `websites.json`, so this means it was fixed at deploy time. Once websites can be added and removed at runtime through the API the alarm loop was removed from the stack and the CRUD Lambda calls `put_metric_alarm` on `POST` AND `delete_alarms` on `DELETE`.
+
+The stack and Lambda can't both manage the same alarms as it means they would overwrite each other.
+
+### Seeding and clean up
+
+Because CloudFormation no longer creates the alarms, it can't set up on deploy or remove on teardown. The stack uses a `AwsCustomResource` to apply the CRUD Lambda at deployment and teardown. `seed_targets` adds the three websites in the `websites.json` to the table along with their alarms. When the stack is deleted, `purge_all_alarms` deletes every alarm with the name that starts with that stacks name.
+
+`websites.json` is now just the starting list for a new stage, after that, the target table is where the data will be taken from.
+
+
+### Least-privilege permissions
+
+The CRUD Lambda can only create and delete alarms whose names start with its own stack's name, such as `Beta-EricStack-*`, so one stage can't change another stage's alarms. The crawler has read-only access to the targets table.
+
+### A dashboard that finds every website
+
+The dashboard used to build three graphs per website from `websites.json`, so a website added through the API never appeared. It now uses CloudWatch `SEARCH` expressions, which show every website that has the metric, including ones added at runtime.
+
+## CI/CD pipeline
+
+Every push to `main` starts the pipeline. Each stage deploys a complete, separate copy of the system, with its own tables, Lambdas and API, and a change must pass the stage's tests before being deployed
+
+1. **Alpha** runs the unit tests before deploying, then deploys.
+2. **Beta** deploys, then runs integration tests against its real resources. Promotion needs the manual approval `PromoteToGamma`.
+3. **Gamma** deploys, then runs functional tests, including a full CRUD cycle through its public API. Promotion needs the manual approval `PromoteToProd`.
+4. **Prod** deploys.
+
+## Testing
+
+**Unit tests** run in Alpha against nothing deployed. The stack is created in memory and checked as a CloudFormation template (`tests/unit/test_eric_stack.py`, 13 tests). The CRUD Lambda runs with its AWS calls replaced by mocks (`tests/unit/test_crud.py`, 4 tests).
+
+**Integration tests** run in Beta against Beta's real Lambdas and DynamoDB tables (`tests/integration/test_integration.py`, 5 tests, and `tests/integration/test_crud_integration.py`, 2 tests). A real row is written to the real DynamoDB and deleted after success
+
+**Functional tests** run in Gamma. They test the Lambda handlers with mocked AWS (`tests/functional/test_functional.py`, 8 tests) and the real public API (`tests/functional/test_crud_api.py`, 1 test).
+
+```
+cd eric
+python -m pytest tests -v
+```
+
+## What the pipeline catches/caught
+
+In the first deployment, the applied project failed in Beta. Four integration tests reported that the crawler Lambda gave an unhandled exception. The `wiring.py` uses `os.environ` but had forgot to import `os`.
+
+## Deploying and running
+
+You need a AWS account with the CDK region in `ap-southeast-2`, a GitHub personal access token stored in Secrets Manager as `github-token`, Python 3.13, Node.js and AWS CDK CLI.
+
+Set up:
+
+```
+git clone <repository-url>
+cd eric
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+cdk bootstrap
+```
+
+Deploy the pipeline and push to `main`
+
+```
+cdk deploy PipelineStack
+```
+
+Once tests have passed approve `PromoteToGamma` and `PromoteToProd`. Eah stages API URL is in the CloudFormation under the stages stack.
+ 
+ The target list and alarm history can be viewed in DynamoDB under Tables, the alarms in CloudWatch under Alarms, and metrics in CloudWatch under Dashboards.
+
+ To tear down the architecture `cdk destroy`. Note though that it only removes the pipeline, the stage stacks are deployed seperately.
+
+ ```
+cdk destroy PipelineStack
+aws cloudformation delete-stack --stack-name Alpha-EricStack --region ap-southeast-2
+aws cloudformation delete-stack --stack-name Beta-EricStack --region ap-southeast-2
+aws cloudformation delete-stack --stack-name Gamma-EricStack --region ap-southeast-2
+aws cloudformation delete-stack --stack-name Prod-EricStack --region ap-southeast-2
+```
+
+
 
 
 
