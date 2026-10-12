@@ -49,6 +49,8 @@ Each website has two alarms named afte rthe stack and the website. The reponseTi
 
 ## The target list API
 
+Reference for all examples is in [API](API.md)
+
 - `GET /targets` lists every target.
 - `POST /targets` adds a target and creates its alarms.
 - `GET /targets/{url}` reads one target and the current state of its alarms.
