@@ -23,6 +23,7 @@ from aws_cdk import (
     ArnFormat,
     aws_apigateway as apigateway,
     custom_resources as cr,
+    aws_codedeploy as codedeploy,
 
 )
 from constructs import Construct
@@ -66,7 +67,7 @@ class EricStack(Stack):
                           display_name = "Website Monitoring Alerts")
         
 
-    #TODO - WRITE TO DYNAMO DB, CREATE IT IN STACK/ARCHITECTURE
+
     #Table Name : AlarmTable
     #Partition Key : [AlarmName, STRING]
     #Sort Key: [Timestamp, STRING]
@@ -190,6 +191,14 @@ class EricStack(Stack):
             )
         )
 
+        #For automated roll back first need "Alias"
+        #Points to specific version of the CRUD Lambda. API Gateway will call alias
+        #https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html
+        crud_alias = _lambda.Alias(self, "CrudLiveAlias",
+                                   alias_name="live",
+                                   version=crudlambda.current_version,
+                                   )
+
         #API Gateway Gives HTTPS URL, receives requests from net nad passes it to CRUD Lambda
         #RESTful API Gateway, RESTful because resources have own URLS, HTTP method says what to do
         #Status code reports outcome
@@ -203,7 +212,7 @@ class EricStack(Stack):
             deploy_options=apigateway.StageOptions(stage_name="v1"),
             cloud_watch_role=False,
         )
-        crud_integration = apigateway.LambdaIntegration(crudlambda)
+        crud_integration = apigateway.LambdaIntegration(crud_alias)
         targets_resource = api.root.add_resource("targets")
         target_resource = targets_resource.add_resource("{url}")
         for method in ["GET", "POST", "PUT", "DELETE"]:
@@ -212,6 +221,25 @@ class EricStack(Stack):
             target_resource.add_method(method, crud_integration)
 
         self.api_url_output = CfnOutput(self, "ApiUrl", value=api.url)
+        #Starts will rollback and
+        api_errors_alarm = cloudwatch.Alarm(self, "ApiServerErrorsAlarm",
+            alarm_name=f"Rollback-{stack_name}-Api5xx",
+            metric=api.metric_server_error(period=Duration.minutes(1), statistic="Sum"),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        codedeploy.LambdaDeploymentGroup(self, "CrudDeploymentGroup",
+            alias=crud_alias,
+            deployment_config=codedeploy.LambdaDeploymentConfig.CANARY_10_PERCENT_5_MINUTES,
+            alarms=[api_errors_alarm],
+            auto_rollback=codedeploy.AutoRollbackConfig(
+                failed_deployment=True,
+                stopped_deployment=True,
+                deployment_in_alarm=True,
+            ),
+        )
 
         #Make cloudformation invode CRUD Lambda when stage is first deployed, and when stack is deleted
         #Cleans up alarms and seeds table

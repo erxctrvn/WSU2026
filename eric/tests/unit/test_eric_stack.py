@@ -96,7 +96,7 @@ def test_lambda_functions_created(template):
 #Testing if stack creates no alarms as it is in Lambda now
 def test_stack_declares_no_alarms(template):
     """Alarms are created by the CRUD Lambda now. Two owners would overwrite each other."""
-    template.resource_count_is("AWS::CloudWatch::Alarm", 0)
+    template.resource_count_is("AWS::CloudWatch::Alarm", 1)
 
 #Making sure crawler is told name of the targets in table
 def test_crawler_reads_targets_from_dynamodb(template):
@@ -108,3 +108,13 @@ def test_crawler_reads_targets_from_dynamodb(template):
 #Tests to see if stack still creates one dashboard
 def test_dashboard_created(template):
     template.resource_count_is("AWS::CloudWatch::Dashboard", 1)
+
+#Tests to see if lambda rolls back
+def test_crud_lambda_rolls_back_automatically_on_api_errors(template):
+    template.has_resource_properties("AWS::CodeDeploy::DeploymentGroup", {
+        "AutoRollbackConfiguration": {
+            "Enabled": True,
+            "Events": assertions.Match.array_with(["DEPLOYMENT_STOP_ON_ALARM"]),
+        },
+        "AlarmConfiguration": {"Enabled": True},
+    })
