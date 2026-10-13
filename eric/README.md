@@ -15,6 +15,7 @@ Components marked NEW were added for the applied project. The API Gateway, CRUD 
 
 - **Public REST API (API Gateway)** receives the HTTP requests for `\targets` and passes them to CRUD Lambda/
 - **CRUD Lambda (`crud.py`)** creates, reads, updates, and deletes targets, and creates and deletes each targets alarms.
+- **CodeDeploy** rolls back to version of CRUD Lambda if the API starts to return server errrors.
 - **Targets table(DynamoDB)** holds the list of websites to monitor with `url` as the partition key.
 - **Schedule (EventBridge)** triggers the crawler every 15 minutes.
 - **Crawler Lambda (`wiring.py)** reads the targets table, checks each website and publishes the website to CloudWatch/
@@ -99,6 +100,18 @@ The CRUD Lambda can only create and delete alarms whose names start with its own
 ### A dashboard that finds every website
 
 The dashboard used to build three graphs per website from `websites.json`, so a website added through the API never appeared. It now uses CloudWatch `SEARCH` expressions, which show every website that has the metric, including ones added at runtime.
+
+## Automated Rollback
+
+The new version of CRUD Lambda is never switched on for everyone all at once. The API Gateway will call the Lambda through an alias called `live`, which points to a specific version. AWS CodeDeploy controls which version the alias points to.
+
+When a deployment makes changes to the CRUD Lambda:
+1. CodeDeploy will send 10% of API Traffic to new version for 5 minutes and the rest to previous version
+2. A CloudWatch alarm wtaches the API's error metric and covers both handled failure including 500 and 502 errors
+3. If the alarm fires in those 5 minutes CodeDeploy will move traffic to previous version. If CloudFormation update fails and rolls back the pipeline will stop at that stage.
+
+Rollback alarm is called Rollback-<stack name>Api5xx.
+
 
 ## CI/CD pipeline
 
